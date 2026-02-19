@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Custom components */
+.card {
+  @apply bg-aurora-900 rounded-lg shadow-sm border border-aurora-600/30;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-aurora-600 text-white rounded-lg hover:bg-aurora-500 transition-colors;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-aurora-800 text-aurora-100 rounded-lg hover:bg-aurora-700 transition-colors;
+}
+
+.input-field {
+  @apply w-full px-3 py-2 border border-aurora-600/50 rounded-lg focus:ring-2 focus:ring-glow-cyan focus:border-glow-cyan;
+}
