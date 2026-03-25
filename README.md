@@ -1,105 +1,288 @@
-# AI-Based Automated Project Evaluation System
+<div align="center">
 
-An intelligent system that analyzes student source code (ZIP/GitHub) and project reports (PDF) to generate automated scoring and feedback.
+# ✦ A U R O R A ✦
 
-## Features
+### AI-Based Automated Project Evaluation System
 
-- **Multi-format Support**: Process ZIP files, GitHub repositories, and PDF reports
-- **AI-Powered Analysis**: Uses advanced AI models for code quality assessment
-- **Automated Scoring**: Configurable evaluation criteria and rubrics
-- **Detailed Feedback**: Comprehensive feedback on code quality, structure, and documentation
-- **Web Interface**: Modern React-based UI for submissions and results
-- **Database Storage**: Persistent storage of evaluations and feedback history
+*Using Code Understanding & Report Analysis*
 
-## Architecture
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18.x-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge)](LICENSE)
+
+<br/>
+
+> **AURORA** is an intelligent, end-to-end evaluation platform that analyses student source code *(ZIP / GitHub)* and project reports *(PDF)* — delivering rich, automated scoring and actionable feedback powered by state-of-the-art AI.
+
+<br/>
+
+---
+
+</div>
+
+## 🌟 Why AURORA?
+
+Grading student projects manually is slow, inconsistent, and resource-intensive. AURORA solves this by combining **static code analysis**, **AI-driven understanding**, and **natural language report comprehension** into a single, seamless pipeline — giving educators instant, objective, and detailed evaluations.
+
+---
+
+## ✨ Feature Highlights
+
+| Capability | Details |
+|---|---|
+| 📦 **Multi-format Ingestion** | ZIP archives, GitHub repository URLs, PDF reports |
+| 🤖 **AI-Powered Analysis** | GPT-4 & Claude for deep code & report understanding |
+| 📊 **Automated Scoring** | Configurable rubrics with per-criterion breakdown |
+| 💬 **Rich Feedback** | Inline comments, quality metrics & improvement tips |
+| 🖥️ **Modern Web UI** | React 18 + TypeScript + Tailwind CSS + shadcn/ui |
+| 🗃️ **Persistent History** | Full evaluation logs stored in SQLite / PostgreSQL |
+| 🐳 **Docker Ready** | One-command deployment with Docker Compose |
+| 🔒 **Supabase Auth & RLS** | Row-level security for multi-tenant environments |
+
+---
+
+## 🏗️ System Architecture
 
 ```
-├── backend/                 # FastAPI backend
+┌─────────────────────────────────────────────────────────┐
+│                        AURORA                           │
+│                                                         │
+│   ┌──────────────┐       ┌──────────────────────────┐   │
+│   │   React UI   │──────▶│   FastAPI  Backend       │   │
+│   │  (TypeScript)│◀──────│   REST  /  WebSocket     │   │
+│   └──────────────┘       └────────────┬─────────────┘   │
+│                                       │                 │
+│              ┌────────────────────────┼──────────────┐  │
+│              │      Evaluation Engine               │  │
+│              │  ┌──────────────┐  ┌───────────────┐ │  │
+│              │  │ Code Analyzer│  │ PDF Processor │ │  │
+│              │  └──────┬───────┘  └──────┬────────┘ │  │
+│              │         │                 │          │  │
+│              │  ┌──────▼─────────────────▼──────┐  │  │
+│              │  │      Scoring  Engine (AI)      │  │  │
+│              │  └───────────────┬────────────────┘  │  │
+│              │                  │                   │  │
+│              │  ┌───────────────▼────────────────┐  │  │
+│              │  │     Feedback  Generator         │  │  │
+│              │  └────────────────────────────────┘  │  │
+│              └──────────────────────────────────────┘  │
+│                                                         │
+│   ┌──────────────────────────────────────────────────┐  │
+│   │               Database  (SQLite / PostgreSQL)    │  │
+│   └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🗂️ Project Structure
+
+```
+AURORA/
+│
+├── 📂 backend/                   # FastAPI backend service
 │   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── core/           # Configuration
-│   │   ├── models/         # Database models
-│   │   ├── services/       # Business logic
-│   │   └── utils/          # Utilities
+│   │   ├── api/                  # REST endpoints
+│   │   ├── core/                 # Config & Supabase client
+│   │   ├── models/               # SQLAlchemy ORM models
+│   │   ├── services/             # Business logic layer
+│   │   └── utils/                # Helper utilities
+│   ├── migrations/               # Alembic database migrations
 │   ├── requirements.txt
+│   ├── Dockerfile
 │   └── main.py
-├── frontend/               # React frontend
+│
+├── 📂 frontend/                  # React + TypeScript UI
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── services/
+│   │   ├── components/           # Reusable UI components
+│   │   ├── pages/                # Route-level pages
+│   │   │   ├── LandingPage.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── EvaluationDetail.tsx
+│   │   │   └── EvaluationHistory.tsx
+│   │   ├── lib/                  # API client & state store
+│   │   └── index.css
 │   ├── package.json
-│   └── public/
-├── evaluation_engine/      # Core evaluation logic
-│   ├── code_analyzer.py
-│   ├── pdf_processor.py
-│   ├── scoring_engine.py
-│   └── feedback_generator.py
-├── tests/                  # Test suite
-└── docs/                   # Documentation
+│   └── Dockerfile
+│
+├── 📂 evaluation_engine/         # Core AI evaluation logic
+│   ├── code_analyzer.py          # Static + AI code analysis
+│   ├── pdf_processor.py          # PDF extraction & parsing
+│   ├── scoring_engine.py         # Rubric-based scoring
+│   └── feedback_generator.py    # Natural language feedback
+│
+├── 📂 tests/                     # Test suite
+├── 📄 docker-compose.yml
+├── 📄 Makefile
+└── 📄 README.md
 ```
 
-## Technology Stack
+---
 
-- **Backend**: Python 3.9+, FastAPI, SQLAlchemy
-- **Frontend**: React 18, TypeScript, Tailwind CSS, shadcn/ui
-- **AI Integration**: OpenAI GPT-4, Anthropic Claude
-- **Database**: SQLite (development), PostgreSQL (production)
-- **File Processing**: PyPDF2, GitPython, zipfile
-- **Deployment**: Docker, Docker Compose
+## 🛠️ Technology Stack
 
-## Getting Started
+<div align="center">
+
+| Layer | Technology |
+|---|---|
+| **Backend** | Python 3.9+, FastAPI, SQLAlchemy, Alembic |
+| **Frontend** | React 18, TypeScript, Tailwind CSS, shadcn/ui, Zustand |
+| **AI Models** | OpenAI GPT-4, Anthropic Claude |
+| **Database** | SQLite *(dev)* · PostgreSQL / Supabase *(prod)* |
+| **File Parsing** | PyPDF2, GitPython, zipfile |
+| **Auth & Security** | Supabase Auth, Row-Level Security |
+| **Containerisation** | Docker, Docker Compose |
+| **Testing** | Pytest |
+
+</div>
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- Git
 
-### Installation
+- **Python** 3.9+
+- **Node.js** 16+
+- **Git**
+- **Docker** *(optional, for containerised setup)*
 
-1. Clone the repository
-2. Set up backend:
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
-3. Set up frontend:
-   ```bash
-   cd frontend
-   npm install
-   ```
-4. Run the application:
-   ```bash
-   # Backend
-   cd backend && python main.py
-   
-   # Frontend
-   cd frontend && npm start
-   ```
+---
 
-## Usage
+### ⚡ Quick Start (Docker — Recommended)
 
-1. Submit project files (ZIP, GitHub URL, or PDF report)
-2. Configure evaluation criteria
-3. Receive automated scoring and detailed feedback
-4. View evaluation history and analytics
+```bash
+# 1. Clone the repository
+git clone https://github.com/Kiyotakakirito/AURORA-FINAL.git
+cd AURORA-FINAL
 
-## Configuration
+# 2. Copy environment variables
+cp backend/.env.example backend/.env
+#    → Fill in your API keys and database URL
 
-Edit `backend/app/core/config.py` to configure:
-- AI API keys
-- Database settings
-- Scoring rubrics
-- File upload limits
+# 3. Launch everything
+docker-compose up --build
+```
 
-## Contributing
+🌐 Open **http://localhost:3000** in your browser.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+---
 
-## License
+### 🔧 Manual Setup
 
-MIT License
+**Backend**
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Initialise the database
+python setup_db.py
+
+# Start the API server
+uvicorn app.main:app --reload --port 8000
+```
+
+**Frontend**
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+🌐 Frontend → **http://localhost:3000** · API Docs → **http://localhost:8000/docs**
+
+---
+
+## ⚙️ Configuration
+
+Edit `backend/.env` (copy from `.env.example`):
+
+```env
+# AI API Keys
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Database
+DATABASE_URL=sqlite:///./aurora.db       # or postgresql://...
+
+# Supabase (optional)
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=your-anon-key
+
+# Uploads
+MAX_UPLOAD_SIZE_MB=50
+```
+
+Edit `backend/app/core/config.py` to customise:
+- 🎯 Scoring rubrics & weightings
+- 📁 Allowed file types
+- 🔑 Auth settings
+
+---
+
+## 📋 How It Works
+
+```
+ Student Submits                 AURORA Processes              Results Delivered
+ ─────────────                  ─────────────────             ─────────────────
+ 📁 ZIP File   ─┐               ┌─ Code Analysis ─┐           ┌─ Score Report
+ 🔗 GitHub URL ──▶  Ingestion  ──▶─ PDF Parsing   ──▶  AI  ──▶─ Criterion Breakdown
+ 📄 PDF Report ─┘               └─ Rubric Scoring ─┘           └─ Detailed Feedback
+```
+
+1. **Submit** your project (ZIP, GitHub URL, or PDF)
+2. **Configure** evaluation criteria and scoring weights
+3. **AURORA analyses** code structure, quality, documentation & report
+4. **Receive** an instant, detailed score report with actionable feedback
+5. **Track** all evaluations in the history dashboard
+
+---
+
+## 🧪 Running Tests
+
+```bash
+# From project root
+pytest
+
+# With coverage
+pytest --cov=backend/app tests/
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make open source amazing. Here's how to get involved:
+
+1. **Fork** the repository
+2. **Create** a feature branch → `git checkout -b feature/amazing-feature`
+3. **Commit** your changes → `git commit -m 'feat: add amazing feature'`
+4. **Push** → `git push origin feature/amazing-feature`
+5. Open a **Pull Request** 🎉
+
+Please make sure your code passes `pytest` and follows existing conventions.
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+
+---
+
+<div align="center">
+
+Made with ❤️ for smarter, fairer education
+
+⭐ **Star this repo if AURORA helps you!** ⭐
+
+[![GitHub stars](https://img.shields.io/github/stars/Kiyotakakirito/AURORA-FINAL?style=social)](https://github.com/Kiyotakakirito/AURORA-FINAL/stargazers)
+
+</div>
