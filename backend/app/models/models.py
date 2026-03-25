@@ -11,8 +11,8 @@ class Project(Base):
     student_name = Column(String(255), nullable=False)
     student_email = Column(String(255), nullable=True)
     submission_type = Column(String(20), nullable=False)  # 'zip', 'github', 'pdf'
-    file_path = Column(String(500), nullable=True)  # Path to uploaded project file
-    pdf_path = Column(String(500), nullable=True)  # Path to PDF report
+    file_path = Column(String(500), nullable=True)        # Path to uploaded project file
+    pdf_path = Column(String(500), nullable=True)         # Path to PDF report
     github_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -31,7 +31,7 @@ class Evaluation(Base):
     documentation_score = Column(Float)
     innovation_score = Column(Float)
     
-    # Analysis results
+    # Analysis results — JSON works on both SQLite (text) and PostgreSQL (jsonb)
     code_analysis = Column(JSON)
     report_analysis = Column(JSON)
     comprehensive_analysis = Column(JSON)
@@ -42,9 +42,9 @@ class Evaluation(Base):
     
     # Metadata
     ai_model_used = Column(String(100))
-    evaluation_time = Column(Float)  # seconds
+    evaluation_time = Column(Float)                         # seconds
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
 class EvaluationCriteria(Base):
     __tablename__ = "evaluation_criteria"
     

@@ -1,20 +1,37 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { LandingPage } from './pages/LandingPage';
+import { Dashboard } from './pages/Dashboard';
 import { SubmitProject } from './pages/SubmitProject';
-import './App.css';
+import { EvaluationHistory } from './pages/EvaluationHistory';
+import { EvaluationDetail } from './pages/EvaluationDetail';
 
-function App() {
+export const App: React.FC = () => {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/submit" replace />} />
-          <Route path="/submit" element={<SubmitProject />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <BrowserRouter>
+      <Routes>
+        {/* Landing page - no sidebar layout */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* App pages - with sidebar layout */}
+        <Route
+          path="/*"
+          element={
+            <Layout>
+              <Routes>
+                <Route path="/dashboard"          element={<Dashboard />} />
+                <Route path="/submit"             element={<SubmitProject />} />
+                <Route path="/history"            element={<EvaluationHistory />} />
+                <Route path="/evaluations/:id"    element={<EvaluationDetail />} />
+                <Route path="*"                   element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Layout>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   );
-}
+};
 
 export default App;

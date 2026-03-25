@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from datetime import datetime
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -19,6 +18,7 @@ from ..schemas import schemas
 from ..services.project_service import ProjectService
 from ..services.evaluation_service import EvaluationService
 from ..core.config import settings
+from ..core.progress import send_progress, send_complete, send_error, create_job, _queues
 
 router = APIRouter()
 
@@ -82,12 +82,13 @@ async def simple_submit():
     return {"message": "Simple submit works", "status": "success"}
 
 @router.post("/json-submit")
-async def json_submit(request: dict):
+async def json_submit(request: Request):
     """Simple JSON submit for testing"""
+    body = await request.json()
     return {
         "message": "JSON submit works",
         "status": "success",
-        "received": request
+        "received": body
     }
 
 @router.post("/submit/", response_model=schemas.SubmissionResponse)
@@ -99,6 +100,7 @@ async def submit_project(
     github_url: str = Form(""),
     file: Optional[UploadFile] = File(None),
     pdf_file: UploadFile = File(...),  # Required PDF report
+    job_id: Optional[str] = Form(None), # New: Optional job_id for WebSocket progress
     db: Session = Depends(get_db)
 ):
     """Submit a project for evaluation"""
@@ -107,6 +109,11 @@ async def submit_project(
         logger.info(f"Received submission request: name={name}, student={student_name}, type={submission_type}")
         logger.info(f"PDF file: {pdf_file.filename if pdf_file else 'None'}")
         logger.info(f"GitHub URL: {github_url}")
+
+        if job_id:
+            if job_id not in _queues:
+                create_job(job_id)
+            await send_progress(job_id, "uploading", "Starting submission process...", 5)
         
         # Validate submission type
         if submission_type not in ["zip", "github", "pdf"]:
@@ -114,6 +121,8 @@ async def submit_project(
             raise HTTPException(status_code=400, detail="Invalid submission type")
         
         logger.info("Validation passed, creating project data...")
+        if job_id:
+            await send_progress(job_id, "uploading", "Submission type validated.", 10)
         
         # Create project data
         project_data = schemas.ProjectCreate(
@@ -125,6 +134,8 @@ async def submit_project(
         )
         
         logger.info("Project data created, handling files...")
+        if job_id:
+            await send_progress(job_id, "uploading", "Project data prepared, handling file uploads...", 20)
         
         # Handle file uploads
         file_path = None
@@ -133,6 +144,8 @@ async def submit_project(
         # Handle PDF report (required)
         if pdf_file:
             logger.info(f"Processing PDF file: {pdf_file.filename}")
+            if job_id:
+                await send_progress(job_id, "parsing", f"Processing PDF report: {pdf_file.filename}", 30)
             try:
                 # Create upload directory if it doesn't exist
                 os.makedirs(settings.upload_dir, exist_ok=True)
@@ -146,13 +159,19 @@ async def submit_project(
                 with open(pdf_path, "wb") as buffer:
                     shutil.copyfileobj(pdf_file.file, buffer)
                 logger.info("PDF saved successfully")
+                if job_id:
+                    await send_progress(job_id, "parsing", "PDF report saved successfully.", 40)
             except Exception as e:
                 logger.error(f"Failed to save PDF: {str(e)}")
+                if job_id:
+                    await send_error(job_id, f"Failed to save PDF file: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"Failed to save PDF file: {str(e)}")
         
         # Handle project file (ZIP)
         if submission_type in ["zip"] and file:
             logger.info(f"Processing ZIP file: {file.filename}")
+            if job_id:
+                await send_progress(job_id, "uploading", f"Processing project file: {file.filename}", 50)
             try:
                 # Create upload directory if it doesn't exist
                 os.makedirs(settings.upload_dir, exist_ok=True)
@@ -166,15 +185,23 @@ async def submit_project(
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
                 logger.info("ZIP saved successfully")
+                if job_id:
+                    await send_progress(job_id, "uploading", "Project file saved successfully.", 60)
             except Exception as e:
                 logger.error(f"Failed to save file: {str(e)}")
+                if job_id:
+                    await send_error(job_id, f"Failed to save project file: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
         else:
             # No file uploaded for GitHub submission
             logger.info("No ZIP file for GitHub submission")
+            if job_id:
+                await send_progress(job_id, "uploading", "No project file to upload for GitHub submission.", 60)
             pass
         
         logger.info("Creating project record...")
+        if job_id:
+            await send_progress(job_id, "analyzing", "Creating project record in database...", 70)
         # Create project
         project = project_service.create_project(
             db=db,
@@ -184,16 +211,20 @@ async def submit_project(
         )
         
         logger.info(f"Project created successfully with ID: {project.id}")
+        if job_id:
+            await send_progress(job_id, "analyzing", f"Project record created with ID: {project.id}", 80)
         
         # Trigger evaluation
         try:
             logger.info("Starting AI analysis...")
+            if job_id:
+                await send_progress(job_id, "scoring", "Starting AI analysis and evaluation...", 90)
             evaluation = await evaluation_service.evaluate_project(db=db, project_id=project.id)
             
             # Get the comprehensive analysis from the evaluation
             comp_analysis = evaluation.comprehensive_analysis if hasattr(evaluation, 'comprehensive_analysis') else None
             
-            return schemas.SubmissionResponse(
+            response = schemas.SubmissionResponse(
                 message="Project submitted and evaluated successfully",
                 project_id=project.id,
                 evaluation_id=evaluation.id,
@@ -201,6 +232,12 @@ async def submit_project(
                 comprehensive_analysis=comp_analysis,
                 overall_score=evaluation.overall_score
             )
+
+            if job_id:
+                await send_progress(job_id, "feedback", "Evaluation completed successfully.", 100)
+                await send_complete(job_id, response.dict())
+            
+            return response
             
             # Original AI analysis code (commented out for testing)
             # evaluation = await evaluation_service.evaluate_project(db=db, project_id=project.id)
@@ -313,12 +350,14 @@ async def get_overview_stats(db: Session = Depends(get_db)):
     total_projects = project_service.get_project_count(db=db)
     total_evaluations = evaluation_service.get_evaluation_count(db=db)
     avg_score = evaluation_service.get_average_score(db=db)
-    
+    submission_type_counts = project_service.get_submission_type_counts(db=db)
+
     return {
         "total_projects": total_projects,
         "total_evaluations": total_evaluations,
         "average_score": round(avg_score, 2) if avg_score else 0,
-        "recent_evaluations": evaluation_service.get_recent_evaluations(db=db, limit=5)
+        "recent_evaluations": evaluation_service.get_recent_evaluations(db=db, limit=5),
+        "submission_type_counts": submission_type_counts,
     }
 
 @router.get("/ai/status")

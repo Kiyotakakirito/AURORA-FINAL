@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional
-from sqlalchemy.orm import Session
+from types import SimpleNamespace
+from ..core.supabase_client import get_supabase
 from datetime import datetime
 import time
 import logging
@@ -17,8 +18,17 @@ from evaluation_engine.code_analyzer import CodeAnalyzer
 from evaluation_engine.pdf_processor import PDFProcessor
 from evaluation_engine.scoring_engine import ScoringEngine
 from evaluation_engine.feedback_generator import FeedbackGenerator
-from ..models import models
 from ..schemas import schemas
+
+EVAL_TABLE = "evaluations"
+PROJ_TABLE = "projects"
+CRIT_TABLE = "evaluation_criteria"
+
+def _row(data: dict) -> SimpleNamespace:
+    return SimpleNamespace(**data) if data else None
+
+def _rows(data: list) -> List[SimpleNamespace]:
+    return [_row(r) for r in (data or [])]
 from ..services.ollama_service import ollama_service
 from ..services.ollama_feedback_generator import ollama_feedback_generator
 from ..services.ollama_comprehensive_analyzer import ollama_comprehensive_analyzer
@@ -35,61 +45,35 @@ class EvaluationService:
     
     async def evaluate_project(
         self,
-        db: Session,
+        db: Any,
         project_id: int,
         criteria_id: Optional[int] = None
-    ) -> models.Evaluation:
-        """Evaluate a project and create evaluation record"""
-        
-        # Get project
-        project = db.query(models.Project).filter(models.Project.id == project_id).first()
-        if not project:
-            raise ValueError("Project not found")
-        
-        # Get evaluation criteria
-        criteria = None
-        if criteria_id:
-            criteria = db.query(models.EvaluationCriteria).filter(
-                models.EvaluationCriteria.id == criteria_id
-            ).first()
-        
-        # Start evaluation timer
-        start_time = time.time()
-        
-        # Analyze code if available
-        code_analysis = None
-        if project.submission_type in ["zip", "github"]:
-            code_analysis = await self._analyze_code(project)
-        
-        # Analyze report if available
-        report_analysis = None
-        if project.pdf_path:  # PDF is now compulsory
-            report_analysis = await self._analyze_report(project)
-        
-        # Get project files for ultra-comprehensive analysis
-        project_files = None
-        if project.submission_type in ["zip", "github"]:
-            project_files = await self._get_project_files(project)
-        
+    ) -> SimpleNamespace:
+        """Evaluate a project and create evaluation record — delegates to full implementation"""
+        return await self.evaluate_project_fast(db=db, project_id=project_id, criteria_id=criteria_id)
+
+    
     async def evaluate_project_fast(
         self,
-        db: Session,
+        db: Any,
         project_id: int,
         criteria_id: Optional[int] = None
-    ) -> models.Evaluation:
+    ) -> SimpleNamespace:
         """Fast project evaluation - skips slow AI analysis"""
+        sb = get_supabase()
         
-        # Get project
-        project = db.query(models.Project).filter(models.Project.id == project_id).first()
-        if not project:
+        # Get project via Supabase
+        proj_resp = sb.table(PROJ_TABLE).select("*").eq("id", project_id).execute()
+        if not proj_resp.data:
             raise ValueError("Project not found")
+        project = _row(proj_resp.data[0])
         
-        # Get evaluation criteria
+        # Get evaluation criteria via Supabase
         criteria = None
         if criteria_id:
-            criteria = db.query(models.EvaluationCriteria).filter(
-                models.EvaluationCriteria.id == criteria_id
-            ).first()
+            crit_resp = sb.table(CRIT_TABLE).select("*").eq("id", criteria_id).execute()
+            if crit_resp.data:
+                criteria = _row(crit_resp.data[0])
         
         # Start evaluation timer
         start_time = time.time()
@@ -163,8 +147,15 @@ class EvaluationService:
         # Get main project files
         main_files = self._get_main_project_files(files_analyzed)
         
+        # Quick check: is Ollama reachable? (3s max) — avoids 50s+ wait when it's not.
+        ollama_available = await ollama_service.check_available()
+        if not ollama_available:
+            logger.warning("Ollama not available — using static-analysis fallback for all AI sections")
+
         # Generate REAL AI-powered comprehensive analysis using Ollama
         try:
+            if not ollama_available:
+                raise RuntimeError("Ollama not available (skipping to avoid timeout)")
             comprehensive_analysis = await ollama_comprehensive_analyzer.generate_comprehensive_analysis(
                 project_name=project.name,
                 student_name=project.student_name,
@@ -219,6 +210,8 @@ class EvaluationService:
         
         # Generate AI-powered feedback using Ollama
         try:
+            if not ollama_available:
+                raise RuntimeError("Ollama not available (skipping to avoid timeout)")
             feedback_result = await ollama_feedback_generator.generate_feedback(
                 scoring_result=scoring_result,
                 code_analysis=code_analysis,
@@ -242,33 +235,41 @@ class EvaluationService:
                 ]
             }
         
-        # Create evaluation record
-        evaluation = models.Evaluation(
-            project_id=project_id,
-            overall_score=scoring_result["overall_score"],
-            max_score=scoring_result["max_score"],
-            code_quality_score=scoring_result["code_breakdown"].get("code_quality", {}).get("score", 0),
-            functionality_score=scoring_result["code_breakdown"].get("functionality", {}).get("score", 0),
-            documentation_score=scoring_result["code_breakdown"].get("documentation", {}).get("score", 0),
-            innovation_score=scoring_result["code_breakdown"].get("innovation", {}).get("score", 0),
-            code_analysis=code_analysis,
-            report_analysis=report_analysis,
-            comprehensive_analysis=comprehensive_analysis,
-            feedback=feedback_result.get("overall_feedback", ""),
-            strengths=feedback_result.get("strengths", []),
-            weaknesses=feedback_result.get("weaknesses", []),
-            recommendations=feedback_result.get("recommendations", []),
-            ai_model_used="Ollama Local AI - Comprehensive Analysis",
-            evaluation_time=evaluation_time
-        )
-        
-        db.add(evaluation)
-        db.commit()
-        db.refresh(evaluation)
-        
-        return evaluation
+        # Create evaluation record via Supabase
+        import json
+        def _safe_json(val):
+            """Ensure value is JSON-serialisable for Supabase."""
+            if val is None:
+                return None
+            try:
+                json.dumps(val)
+                return val
+            except (TypeError, ValueError):
+                return str(val)
 
-    async def _get_project_files(self, project: models.Project) -> List[str]:
+        payload = {
+            "project_id": project_id,
+            "overall_score": scoring_result["overall_score"],
+            "max_score": scoring_result["max_score"],
+            "code_quality_score": scoring_result["code_breakdown"].get("code_quality", {}).get("score", 0),
+            "functionality_score": scoring_result["code_breakdown"].get("functionality", {}).get("score", 0),
+            "documentation_score": scoring_result["code_breakdown"].get("documentation", {}).get("score", 0),
+            "innovation_score": scoring_result["code_breakdown"].get("innovation", {}).get("score", 0),
+            "code_analysis": _safe_json(code_analysis),
+            "report_analysis": _safe_json(report_analysis),
+            "comprehensive_analysis": _safe_json(comprehensive_analysis),
+            "feedback": feedback_result.get("overall_feedback", ""),
+            "strengths": _safe_json(feedback_result.get("strengths", [])),
+            "weaknesses": _safe_json(feedback_result.get("weaknesses", [])),
+            "recommendations": _safe_json(feedback_result.get("recommendations", [])),
+            "ai_model_used": "Ollama Local AI - Comprehensive Analysis",
+            "evaluation_time": evaluation_time,
+        }
+        sb = get_supabase()
+        eval_resp = sb.table(EVAL_TABLE).insert(payload).execute()
+        return _row(eval_resp.data[0])
+
+    async def _get_project_files(self, project) -> List[str]:
         """Get list of project files"""
         try:
             if project.submission_type == "github" and project.github_url:
@@ -280,7 +281,7 @@ class EvaluationService:
             logger.error(f"Failed to get project files: {e}")
             return []
 
-    async def _analyze_code(self, project: models.Project) -> Dict[str, Any]:
+    async def _analyze_code(self, project) -> Dict[str, Any]:
         """Analyze code from project"""
         try:
             if project.submission_type == "zip" and project.file_path:
@@ -292,7 +293,7 @@ class EvaluationService:
         except Exception as e:
             return {"error": f"Code analysis failed: {str(e)}"}
 
-    async def _analyze_report(self, project: models.Project) -> Optional[Dict[str, Any]]:
+    async def _analyze_report(self, project) -> Optional[Dict[str, Any]]:
         """Analyze PDF report from project"""
         try:
             if project.pdf_path:
@@ -302,101 +303,119 @@ class EvaluationService:
         except Exception as e:
             return {"error": f"Report analysis failed: {str(e)}"}
 
-    def _criteria_to_dict(self, criteria: models.EvaluationCriteria) -> Dict[str, Any]:
-        """Convert criteria model to dictionary"""
+    def _criteria_to_dict(self, criteria) -> Dict[str, Any]:
+        """Convert criteria object to dictionary"""
         if not criteria:
             return {}
         return {
             "weights": {
-                "code_quality": criteria.code_quality_weight,
-                "functionality": criteria.functionality_weight,
-                "documentation": criteria.documentation_weight,
-                "innovation": criteria.innovation_weight
+                "code_quality": getattr(criteria, 'code_quality_weight', 0),
+                "functionality": getattr(criteria, 'functionality_weight', 0),
+                "documentation": getattr(criteria, 'documentation_weight', 0),
+                "innovation": getattr(criteria, 'innovation_weight', 0),
             },
-            "max_score": criteria.max_score,
-            "rubric_details": criteria.rubric_details
+            "max_score": getattr(criteria, 'max_score', 100),
+            "rubric_details": getattr(criteria, 'rubric_details', {}),
         }
 
-    def get_evaluation(self, db: Session, evaluation_id: int) -> Optional[models.Evaluation]:
+    def get_evaluation(self, db: Any, evaluation_id: int) -> Optional[SimpleNamespace]:
         """Get evaluation by ID"""
-        return db.query(models.Evaluation).filter(models.Evaluation.id == evaluation_id).first()
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).select("*").eq("id", evaluation_id).execute()
+        return _row(resp.data[0]) if resp.data else None
 
-    def get_evaluations(self, db: Session, skip: int = 0, limit: int = 100) -> List[models.Evaluation]:
+    def get_evaluations(self, db: Any, skip: int = 0, limit: int = 100) -> List[SimpleNamespace]:
         """Get all evaluations with pagination"""
-        return db.query(models.Evaluation).offset(skip).limit(limit).all()
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).select("*").range(skip, skip + limit - 1).execute()
+        return _rows(resp.data)
 
-    def get_project_evaluations(self, db: Session, project_id: int, skip: int = 0, limit: int = 100) -> List[models.Evaluation]:
+    def get_project_evaluations(self, db: Any, project_id: int, skip: int = 0, limit: int = 100) -> List[SimpleNamespace]:
         """Get all evaluations for a project"""
-        return db.query(models.Evaluation).filter(models.Evaluation.project_id == project_id).offset(skip).limit(limit).all()
-
-    def get_evaluation_count(self, db: Session) -> int:
-        """Get total number of evaluations"""
-        return db.query(models.Evaluation).count()
-
-    def get_average_score(self, db: Session) -> Optional[float]:
-        """Get average score across all evaluations"""
-        result = db.query(models.Evaluation.overall_score).all()
-        if not result:
-            return None
-        scores = [row[0] for row in result]
-        return sum(scores) / len(scores)
-
-    def get_recent_evaluations(self, db: Session, limit: int = 10) -> List[models.Evaluation]:
-        """Get recent evaluations"""
-        return db.query(models.Evaluation).order_by(models.Evaluation.created_at.desc()).limit(limit).all()
-
-    def get_top_performers(self, db: Session, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get top performing projects"""
-        results = db.query(
-            models.Evaluation.project_id,
-            models.Project.name,
-            models.Project.student_name,
-            models.Evaluation.overall_score
-        ).join(models.Project, models.Evaluation.project_id == models.Project.id).order_by(
-            models.Evaluation.overall_score.desc()
-        ).limit(limit).all()
-        return [
-            {"project_id": result[0], "project_name": result[1], "student_name": result[2], "score": result[3]}
-            for result in results
-        ]
-
-    def create_criteria(self, db: Session, criteria: schemas.EvaluationCriteriaCreate) -> models.EvaluationCriteria:
-        """Create evaluation criteria"""
-        db_criteria = models.EvaluationCriteria(
-            name=criteria.name,
-            description=criteria.description,
-            code_quality_weight=criteria.code_quality_weight,
-            functionality_weight=criteria.functionality_weight,
-            documentation_weight=criteria.documentation_weight,
-            innovation_weight=criteria.innovation_weight,
-            max_score=criteria.max_score,
-            rubric_details=criteria.rubric_details
+        sb = get_supabase()
+        resp = (
+            sb.table(EVAL_TABLE)
+            .select("*")
+            .eq("project_id", project_id)
+            .range(skip, skip + limit - 1)
+            .execute()
         )
-        db.add(db_criteria)
-        db.commit()
-        db.refresh(db_criteria)
-        return db_criteria
+        return _rows(resp.data)
 
-    def get_criteria(self, db: Session, criteria_id: int) -> Optional[models.EvaluationCriteria]:
+    def get_evaluation_count(self, db: Any) -> int:
+        """Get total number of evaluations"""
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).select("id", count="exact").execute()
+        return resp.count or 0
+
+    def get_average_score(self, db: Any) -> Optional[float]:
+        """Get average score across all evaluations"""
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).select("overall_score").execute()
+        scores = [r["overall_score"] for r in (resp.data or []) if r.get("overall_score") is not None]
+        return sum(scores) / len(scores) if scores else None
+
+    def get_recent_evaluations(self, db: Any, limit: int = 10) -> List[SimpleNamespace]:
+        """Get recent evaluations"""
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).select("*").order("created_at", desc=True).limit(limit).execute()
+        return _rows(resp.data)
+
+    def get_top_performers(self, db: Any, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get top performing projects — joined manually via two Supabase calls."""
+        sb = get_supabase()
+        evals = sb.table(EVAL_TABLE).select("project_id, overall_score").order("overall_score", desc=True).limit(limit).execute().data or []
+        results = []
+        for ev in evals:
+            proj_resp = sb.table(PROJ_TABLE).select("name, student_name").eq("id", ev["project_id"]).execute()
+            proj = proj_resp.data[0] if proj_resp.data else {}
+            results.append({
+                "project_id": ev["project_id"],
+                "project_name": proj.get("name", ""),
+                "student_name": proj.get("student_name", ""),
+                "score": ev["overall_score"],
+            })
+        return results
+
+    def create_criteria(self, db: Any, criteria: schemas.EvaluationCriteriaCreate) -> SimpleNamespace:
+        """Create evaluation criteria"""
+        sb = get_supabase()
+        payload = {
+            "name": criteria.name,
+            "description": criteria.description,
+            "code_quality_weight": criteria.code_quality_weight,
+            "functionality_weight": criteria.functionality_weight,
+            "documentation_weight": criteria.documentation_weight,
+            "innovation_weight": criteria.innovation_weight,
+            "max_score": criteria.max_score,
+            "rubric_details": criteria.rubric_details,
+        }
+        resp = sb.table(CRIT_TABLE).insert(payload).execute()
+        return _row(resp.data[0])
+
+    def get_criteria(self, db: Any, criteria_id: int) -> Optional[SimpleNamespace]:
         """Get criteria by ID"""
-        return db.query(models.EvaluationCriteria).filter(models.EvaluationCriteria.id == criteria_id).first()
+        sb = get_supabase()
+        resp = sb.table(CRIT_TABLE).select("*").eq("id", criteria_id).execute()
+        return _row(resp.data[0]) if resp.data else None
 
-    def get_criteria_list(self, db: Session, skip: int = 0, limit: int = 100) -> List[models.EvaluationCriteria]:
+    def get_criteria_list(self, db: Any, skip: int = 0, limit: int = 100) -> List[SimpleNamespace]:
         """Get all evaluation criteria"""
-        return db.query(models.EvaluationCriteria).offset(skip).limit(limit).all()
+        sb = get_supabase()
+        resp = sb.table(CRIT_TABLE).select("*").range(skip, skip + limit - 1).execute()
+        return _rows(resp.data)
 
-    def get_active_criteria(self, db: Session) -> Optional[models.EvaluationCriteria]:
+    def get_active_criteria(self, db: Any) -> Optional[SimpleNamespace]:
         """Get currently active criteria"""
-        return db.query(models.EvaluationCriteria).filter(models.EvaluationCriteria.is_active == True).first()
+        sb = get_supabase()
+        resp = sb.table(CRIT_TABLE).select("*").eq("is_active", True).limit(1).execute()
+        return _row(resp.data[0]) if resp.data else None
 
-    def delete_evaluation(self, db: Session, evaluation_id: int) -> bool:
+    def delete_evaluation(self, db: Any, evaluation_id: int) -> bool:
         """Delete an evaluation"""
-        evaluation = db.query(models.Evaluation).filter(models.Evaluation.id == evaluation_id).first()
-        if not evaluation:
-            return False
-        db.delete(evaluation)
-        db.commit()
-        return True
+        sb = get_supabase()
+        resp = sb.table(EVAL_TABLE).delete().eq("id", evaluation_id).execute()
+        return bool(resp.data)
 
     def _generate_project_description(self, files_analyzed: List, tech_stack: List, code_metrics: Dict, project_name: str, github_url: str = None) -> str:
         """Generate detailed project description based on actual GitHub analysis"""

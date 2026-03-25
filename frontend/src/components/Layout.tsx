@@ -1,187 +1,173 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { 
-  Upload, 
-  Menu,
-  X
+import React, { useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LayoutDashboard, Upload, History,
+  ChevronLeft, Zap, Activity,
 } from 'lucide-react';
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
+const navItems = [
+  { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+  { to: '/submit',    label: 'Submit',    icon: <Upload size={18} /> },
+  { to: '/history',   label: 'History',   icon: <History size={18} /> },
+];
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+const pageLabels: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/submit':    'Submit Project',
+  '/history':   'Evaluation History',
+};
+
+export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
 
-  const navigation = [
-    { name: 'Submit Project', href: '/submit', icon: Upload },
-  ];
-
-  const isActive = (href: string) => location.pathname === href;
+  const currentLabel =
+    Object.entries(pageLabels).find(([path]) =>
+      path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
+    )?.[1] ?? 'AURORA';
 
   return (
-    <div className="min-h-screen bg-deep-900 relative overflow-hidden">
-      {/* Watermark Background - Multiple Logo Instances */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Center large watermark */}
-        <img 
-          src="/aurora-logo.png" 
-          alt="" 
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-auto opacity-[0.02]"
-        />
-        {/* Corner watermarks */}
-        <img src="/aurora-logo.png" alt="" className="absolute top-10 left-10 w-[200px] h-auto opacity-[0.015]" />
-        <img src="/aurora-logo.png" alt="" className="absolute top-10 right-10 w-[200px] h-auto opacity-[0.015]" />
-        <img src="/aurora-logo.png" alt="" className="absolute bottom-10 left-10 w-[200px] h-auto opacity-[0.015]" />
-        <img src="/aurora-logo.png" alt="" className="absolute bottom-10 right-10 w-[200px] h-auto opacity-[0.015]" />
-        {/* Side watermarks */}
-        <img src="/aurora-logo.png" alt="" className="absolute top-1/4 left-5 w-[150px] h-auto opacity-[0.01]" />
-        <img src="/aurora-logo.png" alt="" className="absolute top-3/4 left-5 w-[150px] h-auto opacity-[0.01]" />
-        <img src="/aurora-logo.png" alt="" className="absolute top-1/4 right-5 w-[150px] h-auto opacity-[0.01]" />
-        <img src="/aurora-logo.png" alt="" className="absolute top-3/4 right-5 w-[150px] h-auto opacity-[0.01]" />
-      </div>
+    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
 
-      {/* Animated Stars Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        {/* Twinkling Stars - 30 stars */}
-        {[...Array(30)].map((_, i) => (
-          <div key={`star-${i}`} className={`star star-${i + 1}`}></div>
-        ))}
+      {/* ─── Sidebar ─── */}
+      <motion.aside
+        className="sidebar"
+        animate={{ width: collapsed ? 64 : 240 }}
+        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      >
+        {/* Logo row – no toggle button here */}
+        <div className="sidebar-logo">
+          <motion.div
+            className="logo-icon"
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Zap size={20} color="#fff" />
+          </motion.div>
 
-        {/* Main Floating Particles - 20 particles */}
-        {[...Array(20)].map((_, i) => (
-          <div key={`particle-${i}`} className={`particle particle-${i + 1}`}></div>
-        ))}
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.div
+                className="logo-text"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.2 }}
+              >
+                <span className="logo-main">AURORA</span>
+                <span className="logo-sub">AI Evaluator</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-        {/* Medium Particles - 15 particles */}
-        {[...Array(15)].map((_, i) => (
-          <div key={`medium-${i}`} className={`medium-particle mp-${i + 1}`}></div>
-        ))}
-
-        {/* Micro Particles - 20 particles */}
-        {[...Array(20)].map((_, i) => (
-          <div key={`micro-${i}`} className={`micro-particle mp-${i + 1}`}></div>
-        ))}
-
-        {/* Aurora Glow Effect */}
-        <div className="aurora-glow-bg"></div>
-      </div>
-      {/* Mobile sidebar */}
-      <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}>
-        <div className={`fixed inset-0 bg-deep-1000/90 backdrop-blur-sm transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`} 
-             onClick={() => setSidebarOpen(false)} />
-        
-        <div className={`relative flex w-64 flex-1 flex-col bg-aurora-800/90 backdrop-blur-md border-r border-aurora-600/30 transform transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="flex items-center justify-between p-4 border-b border-aurora-600/30">
-            <div className="flex items-center space-x-2">
-              <img src="/aurora-logo.png" alt="AURORA" className="h-10 w-auto" />
-              <h1 className="text-xl font-bold text-white">AURORA</h1>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="text-aurora-200 hover:text-glow-cyan transition-colors"
+        {/* Nav */}
+        <nav className="sidebar-nav">
+          {navItems.map((item, idx) => (
+            <motion.div
+              key={item.to}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.06, duration: 0.3 }}
             >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          
-          <nav className="flex-1 p-4 space-y-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                    isActive(item.href)
-                      ? 'bg-aurora-600/50 text-glow-cyan border border-glow-cyan/30'
-                      : 'text-aurora-100 hover:bg-aurora-700/50 hover:text-glow-cyan'
-                  }`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-          
-          <div className="p-4 border-t border-aurora-600/30">
-            <p className="text-xs text-aurora-300 text-center">
-              Automated Universal Review<br/>& Objective Rating Analyzer
-            </p>
-          </div>
-        </div>
-      </div>
+              <NavLink
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) => `nav-item ${isActive ? 'nav-active' : ''}`}
+                title={collapsed ? item.label : undefined}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      className="nav-label"
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: 'auto' }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </NavLink>
+            </motion.div>
+          ))}
+        </nav>
 
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-1 flex-col bg-aurora-800/80 backdrop-blur-md border-r border-aurora-600/30">
-          <div className="flex items-center p-6 border-b border-aurora-600/30">
-            <img src="/aurora-logo.png" alt="AURORA" className="h-12 w-auto mr-3" />
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-wider">AURORA</h1>
-              <p className="text-xs text-glow-teal">AI Evaluation System</p>
-            </div>
-          </div>
-          
-          <nav className="flex-1 p-4 space-y-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all ${
-                    isActive(item.href)
-                      ? 'bg-aurora-600/50 text-glow-cyan border border-glow-cyan/30'
-                      : 'text-aurora-100 hover:bg-aurora-700/50 hover:text-glow-cyan'
-                  }`}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-          
-          <div className="p-4 border-t border-aurora-600/30">
-            <p className="text-xs text-aurora-300 text-center leading-relaxed">
-              Automated Universal Review<br/>& Objective Rating Analyzer
-            </p>
-          </div>
+        {/* Bottom */}
+        <div className="sidebar-bottom">
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.div
+                className="sidebar-version"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                v3.0.0 — AURORA AI
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </div>
+      </motion.aside>
 
-      {/* Main content */}
-      <div className="lg:pl-64">
-        {/* Top bar */}
-        <div className="sticky top-0 z-40 bg-deep-800/90 backdrop-blur-md border-b border-aurora-600/30">
-          <div className="flex items-center justify-between p-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="text-aurora-200 hover:text-glow-cyan lg:hidden transition-colors"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-            
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <img src="/aurora-logo.png" alt="AURORA" className="h-6 w-auto" />
-                <span className="text-sm text-aurora-100">
-                  AI-Powered Project Evaluation
-                </span>
-              </div>
-            </div>
+      {/*
+        ─── Collapse toggle ───────────────────────────────────────────────────
+        IMPORTANT: this button lives OUTSIDE <motion.aside> so that the
+        sidebar's `overflow: hidden` can never clip or block it.
+        We animate its `left` position to follow the sidebar edge.
+      */}
+      <motion.button
+        className="collapse-btn"
+        onClick={() => setCollapsed(s => !s)}
+        animate={{ left: collapsed ? 51 : 227 }}
+        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+        whileHover={{ scale: 1.15 }}
+        whileTap={{ scale: 0.9 }}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        <motion.div
+          animate={{ rotate: collapsed ? 180 : 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <ChevronLeft size={14} />
+        </motion.div>
+      </motion.button>
+
+      {/* ─── Main ─── */}
+      <main className="main-content">
+        {/* Top Bar */}
+        <header className="top-bar">
+          <motion.div
+            key={currentLabel}
+            className="breadcrumb"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            {currentLabel}
+          </motion.div>
+          <div className="top-bar-actions">
+            <Activity size={15} color="var(--text-muted)" />
+            <div className="aurora-status-dot" title="System Online" />
           </div>
-        </div>
+        </header>
 
-        {/* Page content */}
-        <main className="p-6">
+        {/* Animated page transitions */}
+        <motion.div
+          key={location.pathname}
+          className="content-area"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+        >
           {children}
-        </main>
-      </div>
+        </motion.div>
+      </main>
     </div>
   );
 };

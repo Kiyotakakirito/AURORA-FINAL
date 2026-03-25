@@ -1,61 +1,77 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
 import uvicorn
 import os
 import sys
+import logging
 
-# Add evaluation_engine to Python path
+# Structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"time": "%(asctime)s", "level": "%(levelname)s", "logger": "%(name)s", "msg": "%(message)s"}'
+)
+logger = logging.getLogger(__name__)
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from app.core.config import settings
 from app.core.database import get_db, engine
 from app.models import models
 from app.api.router import router
+from app.api.websocket_router import ws_router
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="AI Project Evaluation System",
-    description="Automated evaluation system for student projects",
-    version="1.0.0"
+    title="AURORA — AI Project Evaluation System",
+    description="Automated Universal Review & Objective Rating Analyzer",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# CORS middleware
+# CORS — allow frontend origins including WS upgrade
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],  # React frontend
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include API routes
+# REST API routes
 app.include_router(router, prefix="/api/v1")
 
-# Serve static files
+# WebSocket routes (no prefix; path is /ws/evaluate/{job_id})
+app.include_router(ws_router)
+
+# Static files
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/test-endpoint")
-async def test_endpoint():
-    print("TEST ENDPOINT CALLED!!!")
-    return {"message": "Backend is working!", "status": "ok"}
 
 @app.get("/")
 async def root():
-    return {"message": "AI Project Evaluation System API"}
+    return {"message": "AURORA AI Evaluation System", "version": "2.0.0", "docs": "/docs"}
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "service": "aurora-backend"}
+
 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=True,
+        log_level="info",
     )
